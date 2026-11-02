@@ -29,6 +29,7 @@ class TrainConfig:
     log_every: int = 50
     seed: int = 0
     amp: str = "off"  # "off" (fp32) or "fp16"
+    ddp_fp16_grads: bool = False  # all-reduce gradients in fp16 (communication only)
 
 
 @dataclass

@@ -27,6 +27,7 @@ train:
   milestone_epochs: 500
   seed: 0
   amp: "off"
+  ddp_fp16_grads: true
 sampling:
   patch_size: 64
   stride: 8

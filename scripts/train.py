@@ -23,6 +23,7 @@ from pathlib import Path
 
 import torch
 import torch.distributed as dist
+from torch.distributed.algorithms.ddp_comm_hooks import default_hooks
 from torch.nn.parallel import DistributedDataParallel as DDP
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -52,6 +53,7 @@ def main() -> None:
     p.add_argument("--max-steps", type=int, help="override train.max_steps (smoke/benchmark)")
     p.add_argument("--amp", choices=["off", "fp16"], help="override train.amp (benchmark)")
     p.add_argument("--run-dir", help="override run_dir (benchmark)")
+    p.add_argument("--ddp-fp16-grads", choices=["on", "off"], help="override train.ddp_fp16_grads (benchmark)")
     a = p.parse_args()
 
     os.environ.setdefault("TORCH_NCCL_ASYNC_ERROR_HANDLING", "1")
@@ -66,6 +68,8 @@ def main() -> None:
         cfg.train.amp = a.amp
     if a.run_dir:
         cfg.run_dir = a.run_dir
+    if a.ddp_fp16_grads:
+        cfg.train.ddp_fp16_grads = a.ddp_fp16_grads == "on"
     tc = cfg.train
     max_steps = a.max_steps if a.max_steps is not None else tc.max_steps
     run = Path(cfg.run_dir)
@@ -95,7 +99,10 @@ def main() -> None:
     if a.resume == "auto" and last.exists():
         state = load_checkpoint(last, model, ema, opt, scaler, map_location=device)
         state["restart_count"] += 1
-    ddp = DDP(model, device_ids=[local_rank])
+    ddp = DDP(model, device_ids=[local_rank], gradient_as_bucket_view=True, static_graph=True)
+    if tc.ddp_fp16_grads:
+        # Gradients are all-reduced in fp16 (PCIe-only interconnect); parameters/optimizer stay fp32.
+        ddp.register_comm_hook(None, default_hooks.fp16_compress_hook)
     step = state["global_step"]
     cpu_gen, dev_gen = make_generators(tc.seed, rank, step, device)
     if rank == 0:
