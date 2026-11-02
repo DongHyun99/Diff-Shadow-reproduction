@@ -1,0 +1,13 @@
+.venv/
+*.pdf
+outputs/
+*.pt
+*.pth
+*.ckpt
+__pycache__/
+.pytest_cache/
+.gjc/
+*.log
+*.png
+*.jpg
+.DS_Store
