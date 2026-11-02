@@ -71,8 +71,12 @@ def main() -> None:
     out.mkdir(parents=True, exist_ok=True)
 
     data = PairedShadowDataset(cfg.dataset, a.split, size=cfg.image_size, limit=a.limit)
+    torch.backends.cudnn.benchmark = True
     model = ParallelUNets(cfg.model).to(device).eval()
     state = load_ema_weights(ckpt, model, map_location=device)
+    use_amp = cfg.train.amp == "fp16" and device.type == "cuda"
+    if use_amp:
+        model = model.to(memory_format=torch.channels_last)
     alphas = linear_alphas_cumprod(cfg.diffusion)
     if rank == 0:
         print(f"[sample] {ckpt} (step {state['global_step']}) -> {out}, {len(data)} images, {world} workers", flush=True)
@@ -89,7 +93,9 @@ def main() -> None:
             shadow, mask = shadow[..., o:o + a.crop, o:o + a.crop], mask[..., o:o + a.crop, o:o + a.crop]
         gen = torch.Generator(device=device).manual_seed(zlib.crc32(item["name"].encode()))
         t0 = time.time()
-        res = gss_sample(model, alphas, shadow.to(device), mask.to(device), cfg.sampling, generator=gen)
+        with torch.autocast("cuda", dtype=torch.float16, enabled=use_amp):
+            res = gss_sample(model, alphas, shadow.to(device), mask.to(device), cfg.sampling, generator=gen)
+        res = res.float()
         times.append(time.time() - t0)
         Image.fromarray(to_uint8(res[0])).save(dst)
 

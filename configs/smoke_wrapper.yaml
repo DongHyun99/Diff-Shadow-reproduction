@@ -27,8 +27,10 @@ train:
   log_every: 5
   milestone_epochs: 500
   seed: 0
-  amp: "off"
+  amp: "fp16"
   ddp_fp16_grads: true
+  channels_last: true
+  compile: true
 sampling:
   patch_size: 64
   stride: 8

@@ -79,24 +79,37 @@ Hardware: 8x NVIDIA TITAN RTX 24 GB (Turing, PCIe only, two NUMA nodes).
   that run (`outputs/<run>/first_launch_utc`), or 2000 epochs, whichever comes first. Crash and restart gaps
   count against the budget. `train_seconds` (time spent inside training steps) is logged but is not a stop
   condition. Test-set sampling is outside the budget.
-- **Throughput** (8 GPUs, 200 timed steps, `configs/smoke.yaml` = full model):
+- **Speed-ups used** (all in `configs/*.yaml` / `scripts/train.py`; none changes the model or the optimisation):
+  - mixed precision: fp16 autocast + dynamic loss scaling (`amp: fp16`); weights, optimizer state and EMA stay fp32;
+  - fp16 gradient all-reduce (`ddp_fp16_grads`, DDP communication hook): the step is bound by all-reducing
+    218M gradients over PCIe (no GPU peer-to-peer on this machine, NCCL goes through host shared memory);
+  - `torch.compile` of the DDP model (`compile`), channels-last memory format (`channels_last`),
+    `cudnn.benchmark`, fused Adam, foreach EMA update;
+  - no per-step host synchronisation: the wall-clock deadline is broadcast every 10 steps;
+  - sampling also runs under fp16 autocast with channels-last weights.
+- **Throughput** (8 GPUs, `configs/smoke.yaml` = full model, steps 150-300):
 
   | Setting | s/it |
   |---|---|
-  | fp32, fp32 gradient all-reduce | 0.70 |
-  | fp32, fp16 gradient all-reduce (**used**) | 0.57 |
-  | fp16 autocast, fp16 gradient all-reduce | 0.52 |
-  | single GPU, fp32, no communication | 0.33 |
+  | fp32, fp32 gradient all-reduce (first attempt) | 0.70 |
+  | fp32, fp16 gradient all-reduce | 0.57 |
+  | + fp16 autocast | 0.52 |
+  | + channels-last, torch.compile, cudnn.benchmark, fused Adam | 0.45 |
+  | + no per-step synchronisation (**used**) | 0.41 |
+  | single GPU, same settings, no communication | 0.20 |
 
-  The step time is dominated by all-reducing 218M fp32 gradients over PCIe. All-reducing gradients in fp16
-  (`ddp_fp16_grads`, a DDP communication hook) cuts that by ~20% while weights, optimizer state and the forward /
-  backward pass stay fp32. fp16 autocast would add only another ~8%, so the numerically riskier mixed-precision
-  compute was not used.
-- **Projection at 0.57 s/it:** ISTD+ 166 it/epoch -> about 1800 of 2000 epochs in 48 h; SRD 335 it/epoch -> about
-  900 epochs. SRD in particular is budget-limited; RESULTS.md reports the epochs actually reached.
-- **Sampling:** GSS with r = 8 needs 625 patches x 25 steps per 256 x 256 image, about 60 s per image per GPU
-  (ISTD+ about 1.1 h, SRD about 0.9 h on 8 GPUs). The paper reports 3.5 s per image with a coarser grid; the
-  numbers are not comparable.
+  Remaining overhead is the fp16 all-reduce itself (0.19 s for 218M values, measured with NCCL alone).
+  NCCL tuning (P2P level, channels, tree/ring, protocol) and other DDP bucket sizes did not help.
+  Splitting the machine into two concurrent 4-GPU jobs (ISTD+ and SRD at once, 2 images per GPU) was also
+  measured: 0.64 s/it each, i.e. more total throughput but fewer epochs per dataset; sequential 8-GPU runs
+  were kept so ISTD+ can reach the full 2000-epoch schedule.
+- **Projection at 0.41 s/it:** ISTD+ 166 it/epoch -> 2000 epochs in about 38 h (stops on epochs, before the
+  48 h deadline); SRD 335 it/epoch -> about 1250 of 2000 epochs in 48 h. RESULTS.md reports the epochs reached.
+- **Sampling:** GSS with r = 8 needs 625 patches x 25 steps per 256 x 256 image, about 35 s per image per GPU
+  in fp16 (ISTD+ about 40 min, SRD about 30 min on 8 GPUs). The paper reports 3.5 s per image with a coarser
+  grid; the numbers are not comparable.
+- **First ISTD+ attempt:** a fp32 run (0.50 s/it) was stopped after 50 minutes to switch to the faster settings
+  and restarted from scratch with a new 48 h clock.
 
 ## Assumptions (paper-unspecified or contradictory)
 

@@ -27,9 +27,12 @@ class TrainConfig:
     milestone_epochs: int = 500
     pilot_minutes: tuple[float, ...] = (30.0, 90.0)
     log_every: int = 50
+    deadline_check_every: int = 10
     seed: int = 0
     amp: str = "off"  # "off" (fp32) or "fp16"
     ddp_fp16_grads: bool = False  # all-reduce gradients in fp16 (communication only)
+    channels_last: bool = False  # NHWC memory format (faster fp16 convolutions on tensor cores)
+    compile: bool = False  # torch.compile the DDP model
 
 
 @dataclass

@@ -15,8 +15,8 @@ class EMA:
 
     @torch.no_grad()
     def update(self, model: nn.Module) -> None:
-        for e, p in zip(self.model.parameters(), model.parameters()):
-            e.lerp_(p.detach(), 1 - self.decay)
+        ema_params = list(self.model.parameters())
+        torch._foreach_lerp_(ema_params, [p.detach() for p in model.parameters()], 1 - self.decay)
         for e, b in zip(self.model.buffers(), model.buffers()):
             e.copy_(b)
 

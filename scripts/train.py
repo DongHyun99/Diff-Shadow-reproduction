@@ -54,6 +54,8 @@ def main() -> None:
     p.add_argument("--amp", choices=["off", "fp16"], help="override train.amp (benchmark)")
     p.add_argument("--run-dir", help="override run_dir (benchmark)")
     p.add_argument("--ddp-fp16-grads", choices=["on", "off"], help="override train.ddp_fp16_grads (benchmark)")
+    p.add_argument("--compile", choices=["on", "off"], help="override train.compile (benchmark)")
+    p.add_argument("--images-per-gpu", type=int, help="override train.images_per_gpu (benchmark)")
     a = p.parse_args()
 
     os.environ.setdefault("TORCH_NCCL_ASYNC_ERROR_HANDLING", "1")
@@ -70,6 +72,10 @@ def main() -> None:
         cfg.run_dir = a.run_dir
     if a.ddp_fp16_grads:
         cfg.train.ddp_fp16_grads = a.ddp_fp16_grads == "on"
+    if a.compile:
+        cfg.train.compile = a.compile == "on"
+    if a.images_per_gpu:
+        cfg.train.images_per_gpu = a.images_per_gpu
     tc = cfg.train
     max_steps = a.max_steps if a.max_steps is not None else tc.max_steps
     run = Path(cfg.run_dir)
@@ -87,9 +93,12 @@ def main() -> None:
     data = PairedShadowDataset(cfg.dataset, "train", size=cfg.image_size)
     iters_per_epoch = len(data) // (world * tc.images_per_gpu)
 
+    torch.backends.cudnn.benchmark = True
     model = ParallelUNets(cfg.model).to(device)
+    if tc.channels_last:
+        model = model.to(memory_format=torch.channels_last)
     ema = EMA(model, tc.ema_decay)
-    opt = torch.optim.Adam(model.parameters(), lr=tc.lr, weight_decay=0.0)
+    opt = torch.optim.Adam(model.parameters(), lr=tc.lr, weight_decay=0.0, fused=True)
     use_amp = tc.amp == "fp16"
     scaler = torch.amp.GradScaler("cuda", enabled=use_amp)
     alphas = linear_alphas_cumprod(cfg.diffusion).to(device)
@@ -103,6 +112,7 @@ def main() -> None:
     if tc.ddp_fp16_grads:
         # Gradients are all-reduced in fp16 (PCIe-only interconnect); parameters/optimizer stay fp32.
         ddp.register_comm_hook(None, default_hooks.fp16_compress_hook)
+    net = torch.compile(ddp) if tc.compile else ddp
     step = state["global_step"]
     cpu_gen, dev_gen = make_generators(tc.seed, rank, step, device)
     if rank == 0:
@@ -129,19 +139,21 @@ def main() -> None:
     order_epoch = -1
     reason = None
     while True:
-        # ---- stop decision (rank 0, broadcast) ----
-        flag = torch.zeros(1, device=device)
-        if rank == 0:
-            if deadline.expired():
-                flag[0] = 1
-            elif step >= tc.epochs * iters_per_epoch:
-                flag[0] = 2
-            elif max_steps is not None and step >= max_steps:
-                flag[0] = 3
-        dist.broadcast(flag, 0)
-        if flag.item() != 0:
-            reason = {1: "deadline", 2: "epochs", 3: "max_steps"}[int(flag.item())]
+        # ---- stop decision: step limits are identical on every rank; the wall-clock deadline is
+        # decided by rank 0 and broadcast every `deadline_check_every` steps (avoids a sync per step).
+        if step >= tc.epochs * iters_per_epoch:
+            reason = "epochs"
             break
+        if max_steps is not None and step >= max_steps:
+            reason = "max_steps"
+            break
+        if step % tc.deadline_check_every == 0:
+            flag = torch.tensor([float(rank == 0 and deadline.expired())], device=device)
+            dist.broadcast(flag, 0)
+            if flag.item() != 0:
+                reason = "deadline"
+                break
+        t0 = time.time()
 
         epoch, it = divmod(step, iters_per_epoch)
         if epoch != order_epoch:
@@ -153,18 +165,16 @@ def main() -> None:
         shadow = torch.stack([b["shadow"] for b in batch]).to(device, non_blocking=True)
         mask = torch.stack([b["mask"] for b in batch]).to(device, non_blocking=True)
 
-        t0 = time.time()
         with torch.autocast("cuda", dtype=torch.float16, enabled=use_amp):
             loss, l_diff, l_global = training_losses(
-                ddp, alphas, clean, shadow, mask, cfg.model.image_size, tc.patches_per_image,
+                net, alphas, clean, shadow, mask, cfg.model.image_size, tc.patches_per_image,
                 tc.global_loss_weight, cpu_gen, dev_gen)
         opt.zero_grad(set_to_none=True)
         scaler.scale(loss).backward()
         scaler.step(opt)
         scaler.update()
         ema.update(model)
-        torch.cuda.synchronize()
-        state["train_seconds"] += time.time() - t0
+        state["train_seconds"] += time.time() - t0  # host time per iteration (GPU work runs asynchronously)
         step += 1
         seg_steps += 1
 
