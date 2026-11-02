@@ -1,0 +1,38 @@
+# Diff-Shadow on SRD (local folder ~/Dataset/Shadow/SRD). Paper hyper-parameters
+# (main text + supplementary Tables 4/5); unspecified details are documented in README.
+name: srd
+dataset: srd
+run_dir: outputs/srd
+image_size: 256
+model:
+  image_size: 64
+  base_channels: 128
+  channel_mult: [1, 1, 2, 2, 4, 4]
+  num_res_blocks: 2
+  attn_resolutions: [16]
+diffusion:
+  num_timesteps: 1000
+  beta_start: 0.0001
+  beta_end: 0.02
+  sampling_timesteps: 25
+train:
+  images_per_gpu: 1
+  patches_per_image: 16
+  lr: 0.0002
+  ema_decay: 0.999
+  global_loss_weight: 1.0
+  epochs: 2000
+  budget_hours: 48
+  ckpt_minutes: 30
+  milestone_epochs: 500
+  seed: 0
+  amp: "off"
+sampling:
+  patch_size: 64
+  stride: 8
+  num_timesteps: 1000
+  sampling_timesteps: 25
+  t_sf: 0.5
+  eps: 0.01
+  weight_mode: gss
+  chunk_size: 128
