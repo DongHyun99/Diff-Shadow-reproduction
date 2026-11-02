@@ -1,0 +1,9 @@
+[project]
+name = "diffshadow"
+version = "0.1.0"
+description = "Reproduction of Diff-Shadow: Global-guided Diffusion Model for Shadow Removal (AAAI 2025)"
+requires-python = ">=3.10"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["tests", "."]
