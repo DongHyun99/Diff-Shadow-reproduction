@@ -71,6 +71,9 @@ setsid nohup scripts/run_resumable.sh configs/istd_plus.yaml > outputs/istd_plus
 
 Replace `istd_plus` by `srd` for SRD.
 
+Unattended chain (waits for ISTD+, samples/evaluates it, trains/samples/evaluates SRD, then evaluates the
+500-epoch milestones): `tmux new-session -d -s pipeline "scripts/pipeline.sh >> outputs/pipeline.log 2>&1"`.
+
 ## Compute budget
 
 Hardware: 8x NVIDIA TITAN RTX 24 GB (Turing, PCIe only, two NUMA nodes).
