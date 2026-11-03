@@ -159,6 +159,9 @@ Unspecified details follow the DDPM / WeatherDiffusion conventions that Diff-Sha
   (sigma 1.5) over H x W x 3. The "RMSE" column is that script's LAB mean absolute error: S/NS accumulated over all
   pixels of the test set, ALL averaged over images. LAB uses skimage's D65 white point (MATLAB `makecform` adapts
   to D50); the true LAB RMSE is reported as an extra column.
+- Primary metrics are PSNR and SSIM. RMSE is conventionally measured with the MATLAB script (MATLAB is not
+  available here) and the paper's RMSE values are not consistent with its PSNR gains, so RMSE is reported only
+  as a reference and is not used to judge the reproduction.
 
 ## Layout
 

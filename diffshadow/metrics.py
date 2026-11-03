@@ -142,7 +142,8 @@ class ShadowMetrics:
 
 def markdown_table(summary: dict, title: str) -> str:
     rows = [f"### {title} ({summary['num_images']} images, LAB {summary['illuminant']})", "",
-            "| Region | PSNR | SSIM | RMSE (LAB MAE) | true LAB RMSE |", "|---|---|---|---|---|"]
+            "PSNR / SSIM are the primary metrics; RMSE is a reference value (Python port, not MATLAB).", "",
+            "| Region | PSNR | SSIM | RMSE (LAB MAE, ref.) | true LAB RMSE (ref.) |", "|---|---|---|---|---|"]
     for k in ("S", "NS", "ALL"):
         r = summary[k]
         rows.append(f"| {k} | {r['psnr']:.2f} | {r['ssim']:.3f} | {r['rmse']:.2f} | {r['true_rmse']:.2f} |")
