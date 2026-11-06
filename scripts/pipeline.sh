@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Unattended end-to-end pipeline after the ISTD+ run:
 #
-#   tmux new-session -d -s pipeline "scripts/pipeline.sh > outputs/pipeline.log 2>&1"
+#   tmux new-session -d -s pipeline "scripts/pipeline.sh >> outputs/pipeline.log 2>&1"
 #
 # 1. waits until outputs/istd_plus/DONE exists (or its wrapper is gone);
 # 2. GSS-samples the ISTD+ test set from final.pt (EMA) on all GPUs and evaluates it;

@@ -94,7 +94,7 @@ Hardware: 8x NVIDIA TITAN RTX 24 GB (Turing, PCIe only, two NUMA nodes).
 
   | Setting | s/it |
   |---|---|
-  | fp32, fp32 gradient all-reduce (first attempt) | 0.70 |
+  | fp32, fp32 gradient all-reduce | 0.70 |
   | fp32, fp16 gradient all-reduce | 0.57 |
   | + fp16 autocast | 0.52 |
   | + channels-last, torch.compile, cudnn.benchmark, fused Adam | 0.45 |
