@@ -27,7 +27,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from diffshadow.checkpoint import load_ema_weights  # noqa: E402
 from diffshadow.config import load_config  # noqa: E402
-from diffshadow.data import PairedShadowDataset  # noqa: E402
+from diffshadow.data import DATASETS, PairedShadowDataset  # noqa: E402
 from diffshadow.diffusion import linear_alphas_cumprod  # noqa: E402
 from diffshadow.sampler import gss_sample  # noqa: E402
 from diffshadow.unet import ParallelUNets  # noqa: E402
@@ -43,6 +43,8 @@ def main() -> None:
     p.add_argument("--ckpt", help="checkpoint path (default <run_dir>/ckpt/final.pt)")
     p.add_argument("--out", help="output dir (default <run_dir>/samples)")
     p.add_argument("--split", default="test", choices=["test", "train"])
+    p.add_argument("--dataset", choices=sorted(DATASETS),
+                   help="dataset to sample (default: the config's dataset; set it for cross-dataset evaluation)")
     p.add_argument("--limit", type=int)
     p.add_argument("--device", default="cuda")
     p.add_argument("--chunk-size", type=int)
@@ -70,7 +72,7 @@ def main() -> None:
     out = Path(a.out) if a.out else run / "samples"
     out.mkdir(parents=True, exist_ok=True)
 
-    data = PairedShadowDataset(cfg.dataset, a.split, size=cfg.image_size, limit=a.limit)
+    data = PairedShadowDataset(a.dataset or cfg.dataset, a.split, size=cfg.image_size, limit=a.limit)
     torch.backends.cudnn.benchmark = True
     model = ParallelUNets(cfg.model).to(device).eval()
     state = load_ema_weights(ckpt, model, map_location=device)

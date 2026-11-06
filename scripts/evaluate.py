@@ -20,14 +20,14 @@ from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from diffshadow.data import IMAGE_EXTS, list_triplets  # noqa: E402
+from diffshadow.data import DATASETS, IMAGE_EXTS, list_triplets  # noqa: E402
 from diffshadow.metrics import ShadowMetrics, load_rgb01, markdown_table, shadow_region  # noqa: E402
 
 
 def main() -> None:
     p = argparse.ArgumentParser()
     p.add_argument("--pred", required=True, help="directory of result images (matched by stem)")
-    p.add_argument("--dataset", required=True, choices=["istd_plus", "srd"])
+    p.add_argument("--dataset", required=True, choices=sorted(DATASETS))
     p.add_argument("--out", help="metrics JSON path (markdown table written next to it)")
     p.add_argument("--limit", type=int)
     p.add_argument("--illuminant", default="D65", choices=["D65", "D50"])

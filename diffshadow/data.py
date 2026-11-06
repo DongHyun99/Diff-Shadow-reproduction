@@ -1,4 +1,4 @@
-"""Paired shadow-removal datasets (ISTD+ as ``aistd``, SRD).
+"""Paired shadow-removal datasets (ISTD+ as ``aistd``, SRD; WSRD test set for cross-dataset evaluation).
 
 Folder layout: ``<root>/<split>/<split>_{A,B,C}`` = shadow / mask / shadow-free,
 matched by file stem. Images are resized to 256x256 (bicubic for RGB, nearest for the
@@ -21,6 +21,8 @@ IMAGE_EXTS = {".png", ".jpg", ".jpeg"}
 DATASETS = {
     "istd_plus": {"root": "~/Dataset/Shadow/aistd", "train": 1330, "test": 540},
     "srd": {"root": "~/Dataset/Shadow/SRD", "train": 2680, "test": 408},
+    # Local WSRD copy: test split only, already 256x256 with binary masks (evaluation only).
+    "wsrd": {"root": "~/Dataset/Shadow/WSRD", "test": 100},
 }
 
 
@@ -31,6 +33,8 @@ def _index(folder: Path) -> dict[str, Path]:
 def list_triplets(dataset: str, split: str, root: str | None = None) -> list[tuple[str, Path, Path, Path]]:
     """Return sorted (stem, shadow, mask, free) paths; asserts the expected image count."""
     info = DATASETS[dataset]
+    if split not in info:
+        raise ValueError(f"{dataset} has no {split} split")
     base = Path(os.path.expanduser(root or info["root"])) / split
     a, b, c = (_index(base / f"{split}_{k}") for k in "ABC")
     stems = sorted(set(a) & set(b) & set(c))
